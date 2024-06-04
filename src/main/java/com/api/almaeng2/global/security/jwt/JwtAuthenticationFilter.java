@@ -7,14 +7,15 @@ import jakarta.servlet.http.HttpServletRequest;
 import jakarta.servlet.http.HttpServletResponse;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
+import org.springframework.data.redis.core.RedisTemplate;
 import org.springframework.security.authentication.InsufficientAuthenticationException;
 import org.springframework.security.core.Authentication;
 import org.springframework.security.core.context.SecurityContextHolder;
 import org.springframework.security.web.authentication.AuthenticationFailureHandler;
 import org.springframework.stereotype.Component;
+import org.springframework.util.ObjectUtils;
 import org.springframework.web.filter.OncePerRequestFilter;
 
-import javax.naming.InsufficientResourcesException;
 import java.io.IOException;
 
 @Component
@@ -23,10 +24,9 @@ import java.io.IOException;
 public class JwtAuthenticationFilter extends OncePerRequestFilter {
 
     private final JwtProvider jwtProvider;
-    private final AuthenticationFailureHandler failureHandler;
-
+    private final RedisTemplate<String, Object> redisTemplate;
     @Override
-    protected void doFilterInternal(HttpServletRequest request, HttpServletResponse response, FilterChain filterChain) throws ServletException, IOException {
+    protected void doFilterInternal(final HttpServletRequest request, final HttpServletResponse response, final FilterChain filterChain) throws ServletException, IOException {
 
         String requestURI = request.getRequestURI();
         if(isPublicUri(requestURI)){
@@ -44,24 +44,32 @@ public class JwtAuthenticationFilter extends OncePerRequestFilter {
 
                 if(jwtToken != null){
                     jwtProvider.validateToken(jwtToken);
-                    Authentication authentication = jwtProvider.getAuthentication(jwtToken);
-                    SecurityContextHolder.getContext().setAuthentication(authentication);
+
+                    String isLogout = (String) redisTemplate.opsForValue().get(jwtToken);
+                    if(ObjectUtils.isEmpty(isLogout)) {
+
+                        Authentication authentication = jwtProvider.getAuthentication(jwtToken);
+                        SecurityContextHolder.getContext().setAuthentication(authentication);
+                    }
                 }
             } catch(ApiException e){
-                failureHandler.onAuthenticationFailure(request, response, new InsufficientAuthenticationException(e.getMessage(), e));
+                return;
             }
         }
 
         filterChain.doFilter(request, response);
     }
 
-    private boolean isBearer(String authorizationHeader){
+    private boolean isBearer(final String authorizationHeader){
         return authorizationHeader.startsWith("Bearer ");
     }
 
     private boolean isPublicUri(final String requestURI) {
         return
                 requestURI.startsWith("/swagger-ui/**") ||
-                requestURI.startsWith("/api/health");
+                requestURI.startsWith("/api/health") ||
+                        requestURI.startsWith("/api/v1/auth/signup") ||
+                        requestURI.startsWith("/api/v1/auth/signIn") ||
+                        requestURI.startsWith("/api/v1/auth/reissue");
     }
 }

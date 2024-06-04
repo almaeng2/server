@@ -1,10 +1,13 @@
 package com.api.almaeng2.domain.member.entity;
 
 import com.api.almaeng2.domain.base.BaseTimeEntity;
+import com.api.almaeng2.domain.medicine.entity.PrescriptionList;
 import jakarta.persistence.*;
 import lombok.*;
 
 import java.time.LocalDate;
+import java.util.ArrayList;
+import java.util.List;
 
 @Builder
 @Getter
@@ -34,4 +37,7 @@ public class Member extends BaseTimeEntity {
     @Column(nullable = false)
     @Enumerated(EnumType.STRING)
     private Role role;
+
+    @OneToMany(mappedBy = "member", orphanRemoval = true)
+    private List<PrescriptionList> prescriptionLists = new ArrayList<>();
 }

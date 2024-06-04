@@ -10,6 +10,8 @@ import io.jsonwebtoken.ExpiredJwtException;
 import io.jsonwebtoken.Jwts;
 import io.jsonwebtoken.SignatureAlgorithm;
 import io.jsonwebtoken.security.Keys;
+import io.micrometer.core.instrument.config.validate.Validated;
+import jakarta.servlet.http.HttpServletRequest;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.beans.factory.annotation.Value;
@@ -19,6 +21,7 @@ import org.springframework.security.core.GrantedAuthority;
 import org.springframework.security.core.authority.SimpleGrantedAuthority;
 import org.springframework.security.core.userdetails.User;
 import org.springframework.stereotype.Component;
+import org.springframework.util.ObjectUtils;
 
 import javax.crypto.SecretKey;
 import java.nio.charset.StandardCharsets;
@@ -34,25 +37,29 @@ public class JwtProvider {
     private final MemberRepository memberRepository;
     private final String BEARER_FREFIX = "Bearer ";
     private final long tokenExpiration = 1000L * 60 * 60; // 1 hour
-    private final long reefreshTokenExpiration = 1000L * 60 * 60 * 24 * 7; // 1 week
+    private final long refreshTokenExpiration = 1000L * 60 * 60 * 24 * 7; // 1 week
 
     @Value("${spring.jwt.secret}")
     private String key;
 
     public TokenInfo createToken(String id){
 
+        Date now =  new Date();
+
         return TokenInfo.builder()
-                .accessToken(generateToken(id, tokenExpiration))
-                .refreshToken(generateToken(id, reefreshTokenExpiration))
+                .accessToken(generateToken(id, tokenExpiration, "access"))
+                .refreshToken(generateToken(id, refreshTokenExpiration, "refresh"))
+                .refreshTokenExpiration(now.getTime() + refreshTokenExpiration)
                 .build();
     }
 
-    public String generateToken(final String id, long time){
+    public String generateToken(final String id, long time, String type){
         Claims claims = createClaim(id);
         Date now = new Date();
         SecretKey secretKey = generateKey();
 
         String token = BEARER_FREFIX + Jwts.builder()
+                .claim("type", type)
                 .setClaims(claims)
                 .setIssuedAt(now)
                 .setExpiration(new Date(now.getTime() + time))
@@ -106,5 +113,54 @@ public class JwtProvider {
         return new UsernamePasswordAuthenticationToken(member, jwtToken, authorities);
     }
 
+    // ------------------- resolve Token ----------------------------------------------
 
+    public String resolveAccessToken(HttpServletRequest request){
+        String token = request.getHeader("Authorization");
+        if(!ObjectUtils.isEmpty(token) && token.startsWith("Bearer ")){
+            return token.substring(7);
+        }
+
+        return null;
+    }
+
+    public String resolveRefreshToken(HttpServletRequest httpServletRequest){
+        String token = httpServletRequest.getHeader("refreshToken");
+        if(!ObjectUtils.isEmpty(token) && token.startsWith("Bearer ")){
+            return token.substring(7);
+        }
+        return null;
+    }
+
+    public Boolean isRefreshToken(String token){
+        SecretKey key = generateKey();
+
+        String type= (String) Jwts.parserBuilder().setSigningKey(key).build().parseClaimsJws(token).getBody().get("type");
+
+        return type.equals("refresh");
+    }
+
+    public Boolean isExpired(String token){
+        SecretKey key = generateKey();
+        Date expiration = Jwts.parserBuilder().setSigningKey(key).build().parseClaimsJws(token).getBody().getExpiration();
+
+        if(expiration.getTime() - new Date().getTime() > 0){ // 토큰 재발급할 필요 없음.
+            return false;
+        }
+        return true;
+    }
+
+    public Long getExpiration(String token){
+        SecretKey key = generateKey();
+        Date expiration = Jwts.parserBuilder().setSigningKey(key).build().parseClaimsJws(token).getBody().getExpiration();
+
+        long now = new Date().getTime();
+        return expiration.getTime()-now;
+    }
+
+    public String getPK(String token){
+        SecretKey key = generateKey();
+        Claims claims = Jwts.parserBuilder().setSigningKey(key).build().parseClaimsJws(token).getBody();
+        return claims.getSubject();
+    }
 }

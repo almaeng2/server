@@ -18,4 +18,5 @@ public class Image {
     private Long id;
 
     private String imageUrl;
+    private String imageName;
 }
