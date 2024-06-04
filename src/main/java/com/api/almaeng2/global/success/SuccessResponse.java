@@ -44,8 +44,8 @@ public class SuccessResponse<T> {
         return SuccessResponse.builder()
                 .status(HttpStatus.OK.value())
                 .time(LocalDateTime.now())
-                .code(SuccessResponse.ok().getCode())
-                .msg(SuccessResponse.ok().getMsg())
+                .code(SuccessResponseStatus.SUCCESS.getCode())
+                .msg(SuccessResponseStatus.SUCCESS.getMsg())
                 .build();
     }
 
@@ -53,7 +53,7 @@ public class SuccessResponse<T> {
         return SuccessResponse.builder()
                 .status(HttpStatus.OK.value())
                 .time(LocalDateTime.now())
-                .code(SuccessResponse.ok().getCode())
+                .code(SuccessResponseStatus.SUCCESS.getCode())
                 .msg(msg)
                 .build();
     }
